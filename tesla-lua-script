@@ -17,7 +17,7 @@ local ImGui = IsStudio and require(ReplicatedStorage.ImGui) or loadstring(game:H
 
 --// Create GUI Window
 local Window = ImGui:CreateWindow({
-    Title = "ZINC.LOL",
+    Title = "tesla / private",
     Size = UDim2.new(0, 350, 0, 500),
     Position = UDim2.new(0.5, 0, 0, 70)
 })
