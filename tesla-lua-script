@@ -1,0 +1,157 @@
+-- Full script merged with resolver-based silent aim and Speedwalk keybind
+--// Services
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local Camera = workspace.CurrentCamera
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+local Stats = game:GetService("Stats")
+
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+local IsStudio = RunService:IsStudio()
+
+--// ImGui Load
+local ImGui = IsStudio and require(ReplicatedStorage.ImGui) or loadstring(game:HttpGet("https://github.com/depthso/Roblox-ImGUI/raw/main/ImGui.lua"))()
+
+--// Create GUI Window
+local Window = ImGui:CreateWindow({
+    Title = "ZINC.LOL",
+    Size = UDim2.new(0, 350, 0, 500),
+    Position = UDim2.new(0.5, 0, 0, 70)
+})
+Window:Center()
+
+--// Tabs
+local AimbotTab = Window:CreateTab({ Name = "Aimbot" })
+local VisualsTab = Window:CreateTab({ Name = "ESP" })
+local SilentAimTab = Window:CreateTab({ Name = "Silent Aim" })
+local MovementTab = Window:CreateTab({ Name = "Movement", Color = Color3.new(0, 0, 0), TextColor = Color3.new(1, 1, 1) })
+
+--// Aimbot Variables
+local settings = {
+    aimbotActive = false,
+    isToggleMode = true,
+    PredictionEnabled = false,
+    SmoothingEnabled = false,
+    ShakeEnabled = false,
+    ShowFOV = false,
+    FilledFOV = false,
+    TeamCheck = false,
+    KnockCheck = false,
+    TargetLock = "Head",
+    HitChance = 100,
+    FOV = 50,
+    SmoothX = 1,
+    SmoothY = 1,
+    ShakeX = 0,
+    ShakeY = 0,
+    PredX = 0.5,
+    PredY = 0.5,
+    aimbotKey = Enum.KeyCode.Q,
+    guiKey = Enum.KeyCode.RightControl,
+    SilentAimEnabled = false,
+    SilentAimFOV = 50,
+    ResolveKey = Enum.KeyCode.C,
+    MovementEnabled = false,
+    speed = 16,
+    speedKey = Enum.KeyCode.Z,
+}
+
+local currentTarget, isToggled = nil, false
+
+--// Drawing FOV
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Thickness = 1.5
+FOVCircle.NumSides = 100
+FOVCircle.Filled = false
+FOVCircle.Color = Color3.new(1, 1, 1)
+FOVCircle.Visible = false
+
+--// ESP & Movement Variables
+local ESPEnabled, ESPTracers, ESPCorner = false, false, false
+
+-- Resolver Variables
+local resolver = false
+local resolvedTarget = nil
+local resolvedVelocity = nil
+local Smoothness = 5
+local Stored = {}
+local Value = 1
+
+--// UI Setup
+AimbotTab:Checkbox({ Label = "Enable Aimbot", Value = settings.aimbotActive, Callback = function(_, val) settings.aimbotActive = val currentTarget = nil isToggled = false end })
+AimbotTab:Keybind({ Label = "Aimbot Toggle Key", Value = settings.aimbotKey, Callback = function(_, kc) settings.aimbotKey = kc end })
+AimbotTab:Keybind({ Label = "GUI Toggle Key", Value = settings.guiKey, Callback = function(_, kc) settings.guiKey = kc end })
+
+AimbotTab:Checkbox({ Label = "Enable Prediction", Value = settings.PredictionEnabled, Callback = function(_, val) settings.PredictionEnabled = val end })
+AimbotTab:Slider({ Label = "Prediction X", Format = "%.2f", Value = settings.PredX, MinValue = 0, MaxValue = 1, Callback = function(_, val) settings.PredX = val end })
+AimbotTab:Slider({ Label = "Prediction Y", Format = "%.2f", Value = settings.PredY, MinValue = 0, MaxValue = 1, Callback = function(_, val) settings.PredY = val end })
+
+AimbotTab:Checkbox({ Label = "Enable Smoothing", Value = settings.SmoothingEnabled, Callback = function(_, val) settings.SmoothingEnabled = val end })
+AimbotTab:Slider({ Label = "Smooth X", Format = "%.2f", Value = settings.SmoothX, MinValue = 1, MaxValue = 15, Callback = function(_, val) settings.SmoothX = val end })
+AimbotTab:Slider({ Label = "Smooth Y", Format = "%.2f", Value = settings.SmoothY, MinValue = 1, MaxValue = 15, Callback = function(_, val) settings.SmoothY = val end })
+
+AimbotTab:Checkbox({ Label = "Enable Shake", Value = settings.ShakeEnabled, Callback = function(_, val) settings.ShakeEnabled = val end })
+AimbotTab:Slider({ Label = "Shake X", Format = "%.2f", Value = settings.ShakeX, MinValue = 0, MaxValue = 6, Callback = function(_, val) settings.ShakeX = val end })
+AimbotTab:Slider({ Label = "Shake Y", Format = "%.2f", Value = settings.ShakeY, MinValue = 0, MaxValue = 5, Callback = function(_, val) settings.ShakeY = val end })
+
+AimbotTab:Slider({ Label = "FOV Radius", Format = "%.2f", Value = settings.FOV, MinValue = 10, MaxValue = 200, Callback = function(_, val) settings.FOV = val end })
+AimbotTab:Checkbox({ Label = "Show FOV", Value = settings.ShowFOV, Callback = function(_, val) settings.ShowFOV = val end })
+AimbotTab:Checkbox({ Label = "Filled FOV", Value = settings.FilledFOV, Callback = function(_, val) settings.FilledFOV = val end })
+
+AimbotTab:Checkbox({ Label = "Enable Team Check", Value = settings.TeamCheck, Callback = function(_, val) settings.TeamCheck = val end })
+AimbotTab:Checkbox({ Label = "Enable Knock Check", Value = settings.KnockCheck, Callback = function(_, val) settings.KnockCheck = val end })
+
+AimbotTab:Slider({ Label = "Hit Chance", Format = "%d", Value = settings.HitChance, MinValue = 0, MaxValue = 100, Callback = function(_, val) settings.HitChance = val end })
+AimbotTab:Checkbox({ Label = "Toggle Aimbot", Value = settings.isToggleMode, Callback = function(_, val) settings.isToggleMode = val end })
+
+SilentAimTab:Checkbox({ Label = "Enable Silent Aim", Value = settings.SilentAimEnabled, Callback = function(_, val) settings.SilentAimEnabled = val end })
+SilentAimTab:Slider({ Label = "Silent Aim FOV", Format = "%.2f", Value = settings.SilentAimFOV, MinValue = 10, MaxValue = 100, Callback = function(_, val) settings.SilentAimFOV = val end })
+SilentAimTab:Keybind({ Label = "Resolver Key", Value = settings.ResolveKey, Callback = function(_, kc) settings.ResolveKey = kc end })
+
+VisualsTab:Checkbox({ Label = "Enable ESP", Value = ESPEnabled, Callback = function(_, val) ESPEnabled = val end })
+VisualsTab:Checkbox({ Label = "ESP Tracers", Value = ESPTracers, Callback = function(_, val) ESPTracers = val end })
+VisualsTab:Checkbox({ Label = "ESP Corner Box", Value = ESPCorner, Callback = function(_, val) ESPCorner = val end })
+
+MovementTab:Checkbox({ Label = "Speedwalk", Value = settings.MovementEnabled, Callback = function(_, val) settings.MovementEnabled = val end })
+MovementTab:Slider({ Label = "Speed", Format = "%.2f", Value = settings.speed, MinValue = 15, MaxValue = 100, Callback = function(_, val) settings.speed = val end })
+MovementTab:Keybind({ Label = "Speedwalk Key", Value = settings.speedKey, Callback = function(_, kc) settings.speedKey = kc end })
+
+--// Keybind Toggle for Speedwalk
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == settings.speedKey then
+        settings.MovementEnabled = not settings.MovementEnabled
+    end
+end)
+
+--// Speed Enforcement
+RunService.RenderStepped:Connect(function()
+    if settings.MovementEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        LocalPlayer.Character.Humanoid.WalkSpeed = settings.speed
+    elseif LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        LocalPlayer.Character.Humanoid.WalkSpeed = 16
+    end
+end)
+
+--// Helper Functions
+local function wallCheck(targetPosition, ignoreList)
+    ignoreList = ignoreList or {}
+    table.insert(ignoreList, LocalPlayer.Character)
+    local hit, pos = workspace:FindPartOnRayWithIgnoreList(Ray.new(Camera.CFrame.p, (targetPosition - Camera.CFrame.p).Unit * 1000), ignoreList)
+    return not hit or (pos - Camera.CFrame.p).Magnitude >= (targetPosition - Camera.CFrame.p).Magnitude
+end
+
+local function getRecalculatedVelocity(part)
+    local now = tick()
+    Stored[Value] = { pos = part.Position, time = now }
+    Value = Value % Smoothness + 1
+    if Stored[Value] then
+        return (part.Position - Stored[Value].pos) / (now - Stored[Value].time)
+    end
+end
+
+local function getResolverPosition(player)
+    if not player or not player.Character then return end
