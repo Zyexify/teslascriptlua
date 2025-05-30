@@ -1,3 +1,45 @@
+local HttpService = game:GetService("HttpService")
+local placeId = game.PlaceId
+
+-- Your raw GitHub URL with the supported games list (one ID per line)
+local supportedGamesURL = "https://raw.githubusercontent.com/yourusername/yourrepo/main/supported_games.txt"
+
+local function fetchSupportedGames(url)
+    local success, response = pcall(function()
+        return game:HttpGet(url)
+    end)
+
+    if success and response then
+        local gameIds = {}
+        for line in response:gmatch("[^\r\n]+") do
+            local id = tonumber(line)
+            if id then
+                gameIds[id] = true
+            end
+        end
+        return gameIds
+    else
+        warn("Failed to fetch supported games list:", response)
+        return nil
+    end
+end
+
+local supportedGames = fetchSupportedGames(supportedGamesURL)
+
+if supportedGames == nil then
+    -- Fail-safe: decide if you want to allow or block script if fetching fails
+    warn("Could not verify supported games, stopping script.")
+    return
+end
+
+if not supportedGames[placeId] then
+    warn("This game (PlaceId:", placeId, ") is NOT supported. Script will not run.")
+    return
+end
+
+print("Game supported! Running script...")
+-- Your script continues here...
+
 -- Full script merged with resolver-based silent aim and Speedwalk keybind
 --// Services
 local RunService = game:GetService("RunService")
